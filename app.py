@@ -4,126 +4,63 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# ─────────────────────────────────────────────
-#  PAGE CONFIG
-# ─────────────────────────────────────────────
-st.set_page_config(
-    page_title="🎬 Movie Recommender",
-    page_icon="🎬",
-    layout="wide"
-)
+st.set_page_config(page_title="🎬 Movie Recommender", page_icon="🎬", layout="wide")
 
-# ─────────────────────────────────────────────
-#  CUSTOM CSS
-# ─────────────────────────────────────────────
 st.markdown("""
 <style>
     .stApp { background-color: #0f0f1a; color: #ffffff; }
     .main-title {
-        font-size: 3rem;
-        font-weight: 800;
-        text-align: center;
+        font-size: 3rem; font-weight: 800; text-align: center;
         background: linear-gradient(90deg, #e50914, #ff6b6b, #ffd700);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         margin-bottom: 0.2rem;
     }
-    .sub-title {
-        text-align: center;
-        color: #aaaaaa;
-        font-size: 1rem;
-        margin-bottom: 2rem;
-    }
+    .sub-title { text-align: center; color: #aaaaaa; font-size: 1rem; margin-bottom: 2rem; }
     .movie-card {
         background: linear-gradient(135deg, #1a1a2e, #16213e);
-        border: 1px solid #e50914;
-        border-radius: 12px;
-        padding: 16px 20px;
-        margin-bottom: 12px;
-        transition: transform 0.2s;
+        border: 1px solid #e50914; border-radius: 12px;
+        padding: 16px 20px; margin-bottom: 12px;
     }
-    .movie-card:hover { transform: scale(1.01); }
     .rank-badge {
-        background: #e50914;
-        color: white;
-        border-radius: 50%;
-        width: 32px;
-        height: 32px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        font-size: 0.9rem;
-        margin-right: 10px;
+        background: #e50914; color: white; border-radius: 50%;
+        width: 32px; height: 32px; display: inline-flex;
+        align-items: center; justify-content: center;
+        font-weight: bold; font-size: 0.9rem; margin-right: 10px;
     }
     .movie-title-text { font-size: 1.05rem; font-weight: 600; color: #ffffff; }
     .genre-tag {
-        display: inline-block;
-        background: #2a2a3e;
-        color: #ffd700;
-        border-radius: 20px;
-        padding: 2px 10px;
-        font-size: 0.75rem;
-        margin: 3px 2px;
-        border: 1px solid #ffd70055;
+        display: inline-block; background: #2a2a3e; color: #ffd700;
+        border-radius: 20px; padding: 2px 10px; font-size: 0.75rem;
+        margin: 3px 2px; border: 1px solid #ffd70055;
     }
     .score-text { color: #e50914; font-weight: bold; font-size: 0.85rem; }
     .section-header {
-        font-size: 1.3rem;
-        font-weight: 700;
-        color: #ffd700;
-        border-left: 4px solid #e50914;
-        padding-left: 10px;
+        font-size: 1.3rem; font-weight: 700; color: #ffd700;
+        border-left: 4px solid #e50914; padding-left: 10px;
         margin: 1.5rem 0 1rem 0;
     }
-    .stSelectbox > div > div { background-color: #1a1a2e !important; color: white !important; }
-    .stNumberInput > div > div > input { background-color: #1a1a2e !important; color: white !important; }
     .stButton > button {
         background: linear-gradient(90deg, #e50914, #ff6b6b);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 0.6rem 2rem;
-        font-size: 1rem;
-        font-weight: 600;
-        width: 100%;
-        cursor: pointer;
+        color: white; border: none; border-radius: 8px;
+        padding: 0.6rem 2rem; font-size: 1rem; font-weight: 600; width: 100%;
     }
-    .stButton > button:hover { opacity: 0.9; }
-    .stTabs [data-baseweb="tab"] { color: #aaaaaa; font-weight: 600; }
-    .stTabs [aria-selected="true"] { color: #e50914 !important; border-bottom: 2px solid #e50914 !important; }
     .stat-box {
         background: linear-gradient(135deg, #1a1a2e, #16213e);
-        border: 1px solid #333355;
-        border-radius: 10px;
-        padding: 16px;
-        text-align: center;
+        border: 1px solid #333355; border-radius: 10px;
+        padding: 16px; text-align: center;
     }
     .stat-number { font-size: 1.8rem; font-weight: 800; color: #ffd700; }
     .stat-label  { font-size: 0.85rem; color: #aaaaaa; }
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+    .stTabs [data-baseweb="tab"] { color: #aaaaaa; font-weight: 600; }
+    .stTabs [aria-selected="true"] { color: #e50914 !important; border-bottom: 2px solid #e50914 !important; }
+    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
 
-# ─────────────────────────────────────────────
-#  LOAD & CACHE DATA  ← FIXED: auto-downloads dataset
-# ─────────────────────────────────────────────
+# ── DATA LOADING ──────────────────────────────────────────
 @st.cache_data
 def load_data():
-    import urllib.request, zipfile, io, os
-
-    if not os.path.exists("movies.csv") or not os.path.exists("ratings.csv"):
-        st.info("⏳ Downloading MovieLens dataset for the first time...")
-        url = "https://files.grouplens.org/datasets/movielens/ml-latest-small.zip"
-        with urllib.request.urlopen(url) as r:
-            z = zipfile.ZipFile(io.BytesIO(r.read()))
-            with open("movies.csv", "wb") as f:
-                f.write(z.read("ml-latest-small/movies.csv"))
-            with open("ratings.csv", "wb") as f:
-                f.write(z.read("ml-latest-small/ratings.csv"))
-
     movies  = pd.read_csv("movies.csv")
     ratings = pd.read_csv("ratings.csv")
     return movies, ratings
@@ -139,13 +76,20 @@ def build_content_model(movies_df):
     return cosine_sim, indices
 
 @st.cache_data
-def build_user_item(ratings_df):
-    return ratings_df.pivot_table(index="userId", columns="movieId", values="rating")
+def build_user_item(_ratings_df):
+    # Only keep users with at least 50 ratings to reduce matrix size
+    active_users = _ratings_df.groupby("userId").filter(lambda x: len(x) >= 50)
+    return active_users.pivot_table(index="userId", columns="movieId", values="rating")
+
+@st.cache_data
+def precompute_user_similarity(_user_item):
+    # Precompute full similarity matrix using sklearn (much faster than loop)
+    filled = _user_item.fillna(0).values
+    sim    = cosine_similarity(filled)
+    return pd.DataFrame(sim, index=_user_item.index, columns=_user_item.index)
 
 
-# ─────────────────────────────────────────────
-#  RECOMMENDATION FUNCTIONS
-# ─────────────────────────────────────────────
+# ── RECOMMENDATION FUNCTIONS ──────────────────────────────
 def content_recommend(movie_title, movies_df, cosine_sim, indices, top_n=5):
     if movie_title not in indices:
         return pd.DataFrame()
@@ -159,31 +103,18 @@ def content_recommend(movie_title, movies_df, cosine_sim, indices, top_n=5):
     return result.reset_index(drop=True)
 
 
-def collab_recommend(user_id, user_item, movies_df, top_n=5):
+def collab_recommend(user_id, user_item, sim_df, movies_df, top_n=5):
     if user_id not in user_item.index:
         return pd.DataFrame()
 
-    target       = user_item.loc[user_id]
-    correlations = {}
-    for uid in user_item.index:
-        if uid == user_id:
-            continue
-        other  = user_item.loc[uid]
-        common = target.notna() & other.notna()
-        if common.sum() < 2:
-            continue
-        corr = target[common].corr(other[common])
-        if not np.isnan(corr):
-            correlations[uid] = corr
-
-    if not correlations:
-        return pd.DataFrame()
-
-    top_users    = sorted(correlations.items(), key=lambda x: x[1], reverse=True)[:10]
-    already_seen = set(target.dropna().index)
+    # Get top 20 similar users instantly from precomputed matrix
+    sim_scores   = sim_df[user_id].drop(user_id).sort_values(ascending=False).head(20)
+    already_seen = set(user_item.loc[user_id].dropna().index)
     scores       = {}
 
-    for sim_uid, corr in top_users:
+    for sim_uid, corr in sim_scores.items():
+        if corr <= 0:
+            continue
         sim_ratings = user_item.loc[sim_uid].dropna()
         for mid, rating in sim_ratings.items():
             if mid not in already_seen:
@@ -191,6 +122,9 @@ def collab_recommend(user_id, user_item, movies_df, top_n=5):
                     scores[mid] = {"ws": 0, "cs": 0}
                 scores[mid]["ws"] += corr * rating
                 scores[mid]["cs"] += abs(corr)
+
+    if not scores:
+        return pd.DataFrame()
 
     predictions = {
         mid: round(val["ws"] / val["cs"], 2)
@@ -226,24 +160,20 @@ def render_cards(df, score_label="Similarity", score_suffix=""):
             <span class="rank-badge">#{i+1}</span>
             <span class="movie-title-text">{row['title']}</span>
             <span class="score-text" style="float:right">{score_label}: {score_display}</span>
-            <br><br>
-            {genres_html}
+            <br><br>{genres_html}
         </div>
         """, unsafe_allow_html=True)
 
 
-# ─────────────────────────────────────────────
-#  MAIN APP
-# ─────────────────────────────────────────────
+# ── MAIN APP ──────────────────────────────────────────────
 movies, ratings     = load_data()
 cosine_sim, indices = build_content_model(movies)
 user_item           = build_user_item(ratings)
+sim_df              = precompute_user_similarity(user_item)
 
-# Header
 st.markdown('<div class="main-title">🎬 CineMatch</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">AI-Powered Movie Recommendation System · MovieLens Dataset</div>', unsafe_allow_html=True)
 
-# Stats row
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.markdown(f'<div class="stat-box"><div class="stat-number">{len(movies):,}</div><div class="stat-label">Movies</div></div>', unsafe_allow_html=True)
@@ -255,49 +185,39 @@ with c4:
     st.markdown(f'<div class="stat-box"><div class="stat-number">2</div><div class="stat-label">AI Methods</div></div>', unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
-
-# Tabs
 tab1, tab2 = st.tabs(["🎯  Content-Based Filtering", "👥  Collaborative Filtering"])
 
-# ── TAB 1: Content-Based ──────────────────────────────────
 with tab1:
     st.markdown('<div class="section-header">Find movies similar to one you love</div>', unsafe_allow_html=True)
     st.markdown("Uses **TF-IDF + Cosine Similarity** on movie genres to find the closest matches.")
-
     col1, col2 = st.columns([3, 1])
     with col1:
         movie_list     = sorted(movies["title"].tolist())
-        selected_movie = st.selectbox(
-            "🎬 Select a Movie", movie_list,
-            index=movie_list.index("Matrix, The (1999)") if "Matrix, The (1999)" in movie_list else 0
-        )
+        selected_movie = st.selectbox("🎬 Select a Movie", movie_list,
+            index=movie_list.index("Matrix, The (1999)") if "Matrix, The (1999)" in movie_list else 0)
     with col2:
         top_n_cb = st.number_input("Top N", min_value=1, max_value=20, value=5, key="cb_n")
-
     if st.button("🔍 Get Recommendations", key="cb_btn"):
         with st.spinner("Finding similar movies..."):
             result = content_recommend(selected_movie, movies, cosine_sim, indices, top_n=top_n_cb)
         st.markdown(f'<div class="section-header">Because you liked: {selected_movie}</div>', unsafe_allow_html=True)
         render_cards(result, score_label="Cosine Score")
 
-# ── TAB 2: Collaborative ──────────────────────────────────
 with tab2:
     st.markdown('<div class="section-header">Discover what users like you enjoyed</div>', unsafe_allow_html=True)
-    st.markdown("Uses **Pearson Correlation** to find similar users and predict ratings for unseen movies.")
-
+    st.markdown("Uses **Cosine Similarity** on user rating patterns to predict movies you'll love.")
     col1, col2 = st.columns([3, 1])
     with col1:
         user_ids      = sorted(user_item.index.tolist())
         selected_user = st.selectbox("👤 Select a User ID", user_ids, key="cf_user")
     with col2:
         top_n_cf = st.number_input("Top N", min_value=1, max_value=20, value=5, key="cf_n")
-
     with st.expander("📋 See this user's rated movies"):
-        user_rated = ratings[ratings["userId"] == selected_user].merge(movies, on="movieId")[["title", "genres", "rating"]].sort_values("rating", ascending=False)
+        user_rated = ratings[ratings["userId"] == selected_user].merge(
+            movies, on="movieId")[["title", "genres", "rating"]].sort_values("rating", ascending=False)
         st.dataframe(user_rated.reset_index(drop=True), use_container_width=True)
-
     if st.button("🔍 Get Recommendations", key="cf_btn"):
-        with st.spinner("Analyzing user preferences..."):
-            result = collab_recommend(selected_user, user_item, movies, top_n=top_n_cf)
+        with st.spinner("Finding recommendations..."):
+            result = collab_recommend(selected_user, user_item, sim_df, movies, top_n=top_n_cf)
         st.markdown(f'<div class="section-header">Recommended for User #{selected_user}</div>', unsafe_allow_html=True)
-        render_cards(result, score_label="Predicted Rating", score_suffix="/5")
+        render_cards(result, score_label="Predicted Score", score_suffix="/5")
