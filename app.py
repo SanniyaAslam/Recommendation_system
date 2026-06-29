@@ -76,20 +76,30 @@ def build_content_model(movies_df):
     return cosine_sim, indices
 
 @st.cache_data
-def build_user_item(_ratings_df):
-    # Only keep users with at least 50 ratings to reduce matrix size
-    active_users = _ratings_df.groupby("userId").filter(lambda x: len(x) >= 50)
-    return active_users.pivot_table(index="userId", columns="movieId", values="rating")
+def prepare_collab_data(_ratings_df):
+    """
+    Instead of a huge matrix, precompute a simple movie score table:
+    For each movie: average rating + number of ratings.
+    For each user: just store their ratings as a dict for fast lookup.
+    This uses almost no memory.
+    """
+    # Movie stats: avg rating and count
+    movie_stats = _ratings_df.groupby("movieId").agg(
+        avg_rating=("rating", "mean"),
+        num_ratings=("rating", "count")
+    ).reset_index()
 
-@st.cache_data
-def precompute_user_similarity(_user_item):
-    # Precompute full similarity matrix using sklearn (much faster than loop)
-    filled = _user_item.fillna(0).values
-    sim    = cosine_similarity(filled)
-    return pd.DataFrame(sim, index=_user_item.index, columns=_user_item.index)
+    # Only keep movies rated by at least 10 users (quality filter)
+    movie_stats = movie_stats[movie_stats["num_ratings"] >= 10]
+
+    # User ratings as a simple dict: {userId: {movieId: rating}}
+    user_ratings = _ratings_df.groupby("userId").apply(
+        lambda x: dict(zip(x["movieId"], x["rating"]))
+    ).to_dict()
+
+    return movie_stats, user_ratings
 
 
-# ── RECOMMENDATION FUNCTIONS ──────────────────────────────
 def content_recommend(movie_title, movies_df, cosine_sim, indices, top_n=5):
     if movie_title not in indices:
         return pd.DataFrame()
@@ -103,43 +113,55 @@ def content_recommend(movie_title, movies_df, cosine_sim, indices, top_n=5):
     return result.reset_index(drop=True)
 
 
-def collab_recommend(user_id, user_item, sim_df, movies_df, top_n=5):
-    if user_id not in user_item.index:
+def collab_recommend(user_id, user_ratings, movie_stats, movies_df, ratings_df, top_n=5):
+    """
+    Lightweight collaborative filtering:
+    1. Find movies the user hasn't seen
+    2. Among those, recommend highest rated ones (by all users)
+    3. Boost score if movie genre matches user's taste
+    """
+    if user_id not in user_ratings:
         return pd.DataFrame()
 
-    # Get top 20 similar users instantly from precomputed matrix
-    sim_scores   = sim_df[user_id].drop(user_id).sort_values(ascending=False).head(20)
-    already_seen = set(user_item.loc[user_id].dropna().index)
-    scores       = {}
+    seen_movies  = set(user_ratings[user_id].keys())
+    user_ratings_list = user_ratings[user_id]
 
-    for sim_uid, corr in sim_scores.items():
-        if corr <= 0:
-            continue
-        sim_ratings = user_item.loc[sim_uid].dropna()
-        for mid, rating in sim_ratings.items():
-            if mid not in already_seen:
-                if mid not in scores:
-                    scores[mid] = {"ws": 0, "cs": 0}
-                scores[mid]["ws"] += corr * rating
-                scores[mid]["cs"] += abs(corr)
-
-    if not scores:
-        return pd.DataFrame()
-
-    predictions = {
-        mid: round(val["ws"] / val["cs"], 2)
-        for mid, val in scores.items() if val["cs"] > 0
-    }
-    top_movies = sorted(predictions.items(), key=lambda x: x[1], reverse=True)[:top_n]
-
-    results = []
-    for mid, pred in top_movies:
+    # Figure out user's favorite genres from their highly-rated movies
+    high_rated_ids = [mid for mid, r in user_ratings_list.items() if r >= 4.0]
+    fav_genres = set()
+    for mid in high_rated_ids:
         row = movies_df[movies_df["movieId"] == mid]
         if not row.empty:
+            for g in row.iloc[0]["genres"].split("|"):
+                fav_genres.add(g)
+
+    # Score unseen movies
+    unseen = movie_stats[~movie_stats["movieId"].isin(seen_movies)].copy()
+
+    # Normalize avg_rating to 0-1
+    unseen = unseen.copy()
+    unseen["norm_rating"] = (unseen["avg_rating"] - 1) / 4.0
+
+    # Genre bonus: +0.2 if movie matches user's favorite genres
+    def genre_bonus(movie_id):
+        row = movies_df[movies_df["movieId"] == movie_id]
+        if row.empty:
+            return 0
+        genres = set(row.iloc[0]["genres"].split("|"))
+        return 0.2 if genres & fav_genres else 0
+
+    unseen["genre_boost"] = unseen["movieId"].apply(genre_bonus)
+    unseen["final_score"]  = (unseen["norm_rating"] + unseen["genre_boost"]).round(4)
+    unseen = unseen.sort_values("final_score", ascending=False).head(top_n)
+
+    results = []
+    for _, row in unseen.iterrows():
+        movie_row = movies_df[movies_df["movieId"] == row["movieId"]]
+        if not movie_row.empty:
             results.append({
-                "title":  row.iloc[0]["title"],
-                "genres": row.iloc[0]["genres"],
-                "score":  pred
+                "title":  movie_row.iloc[0]["title"],
+                "genres": movie_row.iloc[0]["genres"],
+                "score":  round(row["avg_rating"], 2)
             })
     return pd.DataFrame(results)
 
@@ -168,8 +190,7 @@ def render_cards(df, score_label="Similarity", score_suffix=""):
 # ── MAIN APP ──────────────────────────────────────────────
 movies, ratings     = load_data()
 cosine_sim, indices = build_content_model(movies)
-user_item           = build_user_item(ratings)
-sim_df              = precompute_user_similarity(user_item)
+movie_stats, user_ratings_dict = prepare_collab_data(ratings)
 
 st.markdown('<div class="main-title">🎬 CineMatch</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">AI-Powered Movie Recommendation System · MovieLens Dataset</div>', unsafe_allow_html=True)
@@ -204,11 +225,11 @@ with tab1:
         render_cards(result, score_label="Cosine Score")
 
 with tab2:
-    st.markdown('<div class="section-header">Discover what users like you enjoyed</div>', unsafe_allow_html=True)
-    st.markdown("Uses **Cosine Similarity** on user rating patterns to predict movies you'll love.")
+    st.markdown('<div class="section-header">Discover movies matched to your taste</div>', unsafe_allow_html=True)
+    st.markdown("Recommends unseen movies based on **your rating history** and **genre preferences**.")
     col1, col2 = st.columns([3, 1])
     with col1:
-        user_ids      = sorted(user_item.index.tolist())
+        user_ids      = sorted(user_ratings_dict.keys())
         selected_user = st.selectbox("👤 Select a User ID", user_ids, key="cf_user")
     with col2:
         top_n_cf = st.number_input("Top N", min_value=1, max_value=20, value=5, key="cf_n")
@@ -218,6 +239,6 @@ with tab2:
         st.dataframe(user_rated.reset_index(drop=True), use_container_width=True)
     if st.button("🔍 Get Recommendations", key="cf_btn"):
         with st.spinner("Finding recommendations..."):
-            result = collab_recommend(selected_user, user_item, sim_df, movies, top_n=top_n_cf)
+            result = collab_recommend(selected_user, user_ratings_dict, movie_stats, movies, ratings, top_n=top_n_cf)
         st.markdown(f'<div class="section-header">Recommended for User #{selected_user}</div>', unsafe_allow_html=True)
-        render_cards(result, score_label="Predicted Score", score_suffix="/5")
+        render_cards(result, score_label="Avg Rating", score_suffix="/5")
