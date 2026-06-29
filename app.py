@@ -4,56 +4,155 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-st.set_page_config(page_title="🎬 Movie Recommender", page_icon="🎬", layout="wide")
+st.set_page_config(page_title="🎬 MovieHub", page_icon="🎬", layout="wide")
 
 st.markdown("""
 <style>
-    .stApp { background-color: #0f0f1a; color: #ffffff; }
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap');
+
+    * { font-family: 'Inter', sans-serif; }
+
+    .stApp { background-color: #0F172A; color: #FFFFFF; }
+
     .main-title {
-        font-size: 3rem; font-weight: 800; text-align: center;
-        background: linear-gradient(90deg, #e50914, #ff6b6b, #ffd700);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        font-family: 'Poppins', sans-serif;
+        font-size: 3.2rem;
+        font-weight: 800;
+        text-align: center;
+        background: linear-gradient(90deg, #3B82F6, #38BDF8, #FFFFFF);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         margin-bottom: 0.2rem;
+        letter-spacing: -1px;
     }
-    .sub-title { text-align: center; color: #aaaaaa; font-size: 1rem; margin-bottom: 2rem; }
+    .sub-title {
+        text-align: center;
+        color: #94A3B8;
+        font-size: 1rem;
+        margin-bottom: 2rem;
+        font-family: 'Inter', sans-serif;
+    }
+
     .movie-card {
-        background: linear-gradient(135deg, #1a1a2e, #16213e);
-        border: 1px solid #e50914; border-radius: 12px;
-        padding: 16px 20px; margin-bottom: 12px;
+        background: #1E293B;
+        border: 1px solid #3B82F6;
+        border-radius: 14px;
+        padding: 18px 22px;
+        margin-bottom: 12px;
+        transition: transform 0.2s, border-color 0.2s;
+    }
+    .movie-card:hover {
+        transform: scale(1.01);
+        border-color: #38BDF8;
     }
     .rank-badge {
-        background: #e50914; color: white; border-radius: 50%;
-        width: 32px; height: 32px; display: inline-flex;
-        align-items: center; justify-content: center;
-        font-weight: bold; font-size: 0.9rem; margin-right: 10px;
+        background: linear-gradient(135deg, #3B82F6, #38BDF8);
+        color: white;
+        border-radius: 50%;
+        width: 34px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.9rem;
+        margin-right: 10px;
+        font-family: 'Poppins', sans-serif;
     }
-    .movie-title-text { font-size: 1.05rem; font-weight: 600; color: #ffffff; }
+    .movie-title-text {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #FFFFFF;
+        font-family: 'Poppins', sans-serif;
+    }
     .genre-tag {
-        display: inline-block; background: #2a2a3e; color: #ffd700;
-        border-radius: 20px; padding: 2px 10px; font-size: 0.75rem;
-        margin: 3px 2px; border: 1px solid #ffd70055;
+        display: inline-block;
+        background: #0F172A;
+        color: #38BDF8;
+        border-radius: 20px;
+        padding: 2px 12px;
+        font-size: 0.75rem;
+        margin: 3px 2px;
+        border: 1px solid #3B82F644;
+        font-family: 'Inter', sans-serif;
     }
-    .score-text { color: #e50914; font-weight: bold; font-size: 0.85rem; }
+    .score-text {
+        color: #38BDF8;
+        font-weight: 700;
+        font-size: 0.85rem;
+        font-family: 'Inter', sans-serif;
+    }
     .section-header {
-        font-size: 1.3rem; font-weight: 700; color: #ffd700;
-        border-left: 4px solid #e50914; padding-left: 10px;
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #38BDF8;
+        border-left: 4px solid #3B82F6;
+        padding-left: 12px;
         margin: 1.5rem 0 1rem 0;
+        font-family: 'Poppins', sans-serif;
     }
     .stButton > button {
-        background: linear-gradient(90deg, #e50914, #ff6b6b);
-        color: white; border: none; border-radius: 8px;
-        padding: 0.6rem 2rem; font-size: 1rem; font-weight: 600; width: 100%;
+        background: linear-gradient(90deg, #3B82F6, #38BDF8);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 0.6rem 2rem;
+        font-size: 1rem;
+        font-weight: 600;
+        width: 100%;
+        font-family: 'Poppins', sans-serif;
+        letter-spacing: 0.3px;
     }
+    .stButton > button:hover { opacity: 0.9; transform: scale(1.01); }
+
     .stat-box {
-        background: linear-gradient(135deg, #1a1a2e, #16213e);
-        border: 1px solid #333355; border-radius: 10px;
-        padding: 16px; text-align: center;
+        background: #1E293B;
+        border: 1px solid #3B82F633;
+        border-radius: 12px;
+        padding: 18px;
+        text-align: center;
     }
-    .stat-number { font-size: 1.8rem; font-weight: 800; color: #ffd700; }
-    .stat-label  { font-size: 0.85rem; color: #aaaaaa; }
-    .stTabs [data-baseweb="tab"] { color: #aaaaaa; font-weight: 600; }
-    .stTabs [aria-selected="true"] { color: #e50914 !important; border-bottom: 2px solid #e50914 !important; }
-    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
+    .stat-number {
+        font-size: 1.9rem;
+        font-weight: 800;
+        color: #38BDF8;
+        font-family: 'Poppins', sans-serif;
+    }
+    .stat-label {
+        font-size: 0.85rem;
+        color: #94A3B8;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        color: #94A3B8;
+        font-weight: 600;
+        font-family: 'Poppins', sans-serif;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #3B82F6 !important;
+        border-bottom: 2px solid #3B82F6 !important;
+    }
+
+    .stSelectbox > div > div {
+        background-color: #1E293B !important;
+        color: white !important;
+        border: 1px solid #3B82F644 !important;
+        border-radius: 8px !important;
+    }
+    .stNumberInput > div > div > input {
+        background-color: #1E293B !important;
+        color: white !important;
+    }
+
+    div[data-testid="stExpander"] {
+        background: #1E293B;
+        border: 1px solid #3B82F633;
+        border-radius: 10px;
+    }
+
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -77,29 +176,18 @@ def build_content_model(movies_df):
 
 @st.cache_data
 def prepare_collab_data(_ratings_df):
-    """
-    Instead of a huge matrix, precompute a simple movie score table:
-    For each movie: average rating + number of ratings.
-    For each user: just store their ratings as a dict for fast lookup.
-    This uses almost no memory.
-    """
-    # Movie stats: avg rating and count
     movie_stats = _ratings_df.groupby("movieId").agg(
         avg_rating=("rating", "mean"),
         num_ratings=("rating", "count")
     ).reset_index()
-
-    # Only keep movies rated by at least 10 users (quality filter)
     movie_stats = movie_stats[movie_stats["num_ratings"] >= 10]
-
-    # User ratings as a simple dict: {userId: {movieId: rating}}
     user_ratings = _ratings_df.groupby("userId").apply(
         lambda x: dict(zip(x["movieId"], x["rating"]))
     ).to_dict()
-
     return movie_stats, user_ratings
 
 
+# ── RECOMMENDATION FUNCTIONS ──────────────────────────────
 def content_recommend(movie_title, movies_df, cosine_sim, indices, top_n=5):
     if movie_title not in indices:
         return pd.DataFrame()
@@ -114,20 +202,11 @@ def content_recommend(movie_title, movies_df, cosine_sim, indices, top_n=5):
 
 
 def collab_recommend(user_id, user_ratings, movie_stats, movies_df, ratings_df, top_n=5):
-    """
-    Lightweight collaborative filtering:
-    1. Find movies the user hasn't seen
-    2. Among those, recommend highest rated ones (by all users)
-    3. Boost score if movie genre matches user's taste
-    """
     if user_id not in user_ratings:
         return pd.DataFrame()
-
-    seen_movies  = set(user_ratings[user_id].keys())
+    seen_movies       = set(user_ratings[user_id].keys())
     user_ratings_list = user_ratings[user_id]
-
-    # Figure out user's favorite genres from their highly-rated movies
-    high_rated_ids = [mid for mid, r in user_ratings_list.items() if r >= 4.0]
+    high_rated_ids    = [mid for mid, r in user_ratings_list.items() if r >= 4.0]
     fav_genres = set()
     for mid in high_rated_ids:
         row = movies_df[movies_df["movieId"] == mid]
@@ -135,14 +214,9 @@ def collab_recommend(user_id, user_ratings, movie_stats, movies_df, ratings_df, 
             for g in row.iloc[0]["genres"].split("|"):
                 fav_genres.add(g)
 
-    # Score unseen movies
     unseen = movie_stats[~movie_stats["movieId"].isin(seen_movies)].copy()
-
-    # Normalize avg_rating to 0-1
-    unseen = unseen.copy()
     unseen["norm_rating"] = (unseen["avg_rating"] - 1) / 4.0
 
-    # Genre bonus: +0.2 if movie matches user's favorite genres
     def genre_bonus(movie_id):
         row = movies_df[movies_df["movieId"] == movie_id]
         if row.empty:
@@ -188,12 +262,12 @@ def render_cards(df, score_label="Similarity", score_suffix=""):
 
 
 # ── MAIN APP ──────────────────────────────────────────────
-movies, ratings     = load_data()
-cosine_sim, indices = build_content_model(movies)
+movies, ratings                = load_data()
+cosine_sim, indices            = build_content_model(movies)
 movie_stats, user_ratings_dict = prepare_collab_data(ratings)
 
-st.markdown('<div class="main-title">🎬 CineMatch</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">AI-Powered Movie Recommendation System · MovieLens Dataset</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🎬 MovieHub</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">AI-Powered Movie Recommendation System &nbsp;·&nbsp; MovieLens Dataset</div>', unsafe_allow_html=True)
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
