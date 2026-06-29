@@ -18,10 +18,7 @@ st.set_page_config(
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
-    /* Background */
     .stApp { background-color: #0f0f1a; color: #ffffff; }
-
-    /* Title */
     .main-title {
         font-size: 3rem;
         font-weight: 800;
@@ -37,8 +34,6 @@ st.markdown("""
         font-size: 1rem;
         margin-bottom: 2rem;
     }
-
-    /* Cards */
     .movie-card {
         background: linear-gradient(135deg, #1a1a2e, #16213e);
         border: 1px solid #e50914;
@@ -48,7 +43,6 @@ st.markdown("""
         transition: transform 0.2s;
     }
     .movie-card:hover { transform: scale(1.01); }
-
     .rank-badge {
         background: #e50914;
         color: white;
@@ -62,11 +56,7 @@ st.markdown("""
         font-size: 0.9rem;
         margin-right: 10px;
     }
-    .movie-title-text {
-        font-size: 1.05rem;
-        font-weight: 600;
-        color: #ffffff;
-    }
+    .movie-title-text { font-size: 1.05rem; font-weight: 600; color: #ffffff; }
     .genre-tag {
         display: inline-block;
         background: #2a2a3e;
@@ -77,18 +67,7 @@ st.markdown("""
         margin: 3px 2px;
         border: 1px solid #ffd70055;
     }
-    .reason-text {
-        color: #aaaaaa;
-        font-size: 0.82rem;
-        margin-top: 6px;
-    }
-    .score-text {
-        color: #e50914;
-        font-weight: bold;
-        font-size: 0.85rem;
-    }
-
-    /* Section headers */
+    .score-text { color: #e50914; font-weight: bold; font-size: 0.85rem; }
     .section-header {
         font-size: 1.3rem;
         font-weight: 700;
@@ -97,12 +76,8 @@ st.markdown("""
         padding-left: 10px;
         margin: 1.5rem 0 1rem 0;
     }
-
-    /* Selectbox & inputs */
     .stSelectbox > div > div { background-color: #1a1a2e !important; color: white !important; }
     .stNumberInput > div > div > input { background-color: #1a1a2e !important; color: white !important; }
-
-    /* Button */
     .stButton > button {
         background: linear-gradient(90deg, #e50914, #ff6b6b);
         color: white;
@@ -115,12 +90,8 @@ st.markdown("""
         cursor: pointer;
     }
     .stButton > button:hover { opacity: 0.9; }
-
-    /* Tabs */
     .stTabs [data-baseweb="tab"] { color: #aaaaaa; font-weight: 600; }
     .stTabs [aria-selected="true"] { color: #e50914 !important; border-bottom: 2px solid #e50914 !important; }
-
-    /* Stats box */
     .stat-box {
         background: linear-gradient(135deg, #1a1a2e, #16213e);
         border: 1px solid #333355;
@@ -130,8 +101,6 @@ st.markdown("""
     }
     .stat-number { font-size: 1.8rem; font-weight: 800; color: #ffd700; }
     .stat-label  { font-size: 0.85rem; color: #aaaaaa; }
-
-    /* Hide streamlit branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
 </style>
@@ -139,10 +108,22 @@ st.markdown("""
 
 
 # ─────────────────────────────────────────────
-#  LOAD & CACHE DATA
+#  LOAD & CACHE DATA  ← FIXED: auto-downloads dataset
 # ─────────────────────────────────────────────
 @st.cache_data
 def load_data():
+    import urllib.request, zipfile, io, os
+
+    if not os.path.exists("movies.csv") or not os.path.exists("ratings.csv"):
+        st.info("⏳ Downloading MovieLens dataset for the first time...")
+        url = "https://files.grouplens.org/datasets/movielens/ml-latest-small.zip"
+        with urllib.request.urlopen(url) as r:
+            z = zipfile.ZipFile(io.BytesIO(r.read()))
+            with open("movies.csv", "wb") as f:
+                f.write(z.read("ml-latest-small/movies.csv"))
+            with open("ratings.csv", "wb") as f:
+                f.write(z.read("ml-latest-small/ratings.csv"))
+
     movies  = pd.read_csv("movies.csv")
     ratings = pd.read_csv("ratings.csv")
     return movies, ratings
@@ -182,7 +163,7 @@ def collab_recommend(user_id, user_item, movies_df, top_n=5):
     if user_id not in user_item.index:
         return pd.DataFrame()
 
-    target   = user_item.loc[user_id]
+    target       = user_item.loc[user_id]
     correlations = {}
     for uid in user_item.index:
         if uid == user_id:
@@ -238,7 +219,7 @@ def render_cards(df, score_label="Similarity", score_suffix=""):
             f'<span class="genre-tag">{g.strip()}</span>'
             for g in row["genres"].split("|")
         )
-        score_val = row.get("score", "")
+        score_val     = row.get("score", "")
         score_display = f"{score_val}{score_suffix}" if score_val != "" else ""
         st.markdown(f"""
         <div class="movie-card">
@@ -254,9 +235,9 @@ def render_cards(df, score_label="Similarity", score_suffix=""):
 # ─────────────────────────────────────────────
 #  MAIN APP
 # ─────────────────────────────────────────────
-movies, ratings = load_data()
+movies, ratings     = load_data()
 cosine_sim, indices = build_content_model(movies)
-user_item = build_user_item(ratings)
+user_item           = build_user_item(ratings)
 
 # Header
 st.markdown('<div class="main-title">🎬 CineMatch</div>', unsafe_allow_html=True)
@@ -281,12 +262,15 @@ tab1, tab2 = st.tabs(["🎯  Content-Based Filtering", "👥  Collaborative Filt
 # ── TAB 1: Content-Based ──────────────────────────────────
 with tab1:
     st.markdown('<div class="section-header">Find movies similar to one you love</div>', unsafe_allow_html=True)
-    st.markdown("Uses **TF-IDF + Cosine Similarity** on movie genres to find the closest matches.", unsafe_allow_html=False)
+    st.markdown("Uses **TF-IDF + Cosine Similarity** on movie genres to find the closest matches.")
 
     col1, col2 = st.columns([3, 1])
     with col1:
-        movie_list   = sorted(movies["title"].tolist())
-        selected_movie = st.selectbox("🎬 Select a Movie", movie_list, index=movie_list.index("Matrix, The (1999)") if "Matrix, The (1999)" in movie_list else 0)
+        movie_list     = sorted(movies["title"].tolist())
+        selected_movie = st.selectbox(
+            "🎬 Select a Movie", movie_list,
+            index=movie_list.index("Matrix, The (1999)") if "Matrix, The (1999)" in movie_list else 0
+        )
     with col2:
         top_n_cb = st.number_input("Top N", min_value=1, max_value=20, value=5, key="cb_n")
 
@@ -299,16 +283,15 @@ with tab1:
 # ── TAB 2: Collaborative ──────────────────────────────────
 with tab2:
     st.markdown('<div class="section-header">Discover what users like you enjoyed</div>', unsafe_allow_html=True)
-    st.markdown("Uses **Pearson Correlation** to find similar users and predict ratings for unseen movies.", unsafe_allow_html=False)
+    st.markdown("Uses **Pearson Correlation** to find similar users and predict ratings for unseen movies.")
 
     col1, col2 = st.columns([3, 1])
     with col1:
-        user_ids   = sorted(user_item.index.tolist())
+        user_ids      = sorted(user_item.index.tolist())
         selected_user = st.selectbox("👤 Select a User ID", user_ids, key="cf_user")
     with col2:
         top_n_cf = st.number_input("Top N", min_value=1, max_value=20, value=5, key="cf_n")
 
-    # Show what the user has already rated
     with st.expander("📋 See this user's rated movies"):
         user_rated = ratings[ratings["userId"] == selected_user].merge(movies, on="movieId")[["title", "genres", "rating"]].sort_values("rating", ascending=False)
         st.dataframe(user_rated.reset_index(drop=True), use_container_width=True)
